@@ -11,7 +11,7 @@ Personal userscripts and browser automation helpers.
 
 ### Media / yt-dlp
 - `userscripts/media/Kindred_Universal_Media_Toolkit.user.js` — v2.0 adaptive desktop/mobile toolkit with popup-or-tab media players, touch controls, responsive multi-player layouts, YouTube live-chat cleanup, anti-rickroll guard, direct-media helpers, yt-dlp playlist commands, and Android/Termux command helpers.
-- `userscripts/media/Kindred_yt-dlp_Helper.user.js` — lightweight yt-dlp command helper with single-video and playlist commands for Best, MP4, MP3, and OPUS.
+- `userscripts/media/Kindred_yt-dlp_Helper.user.js` — v2.0 adaptive desktop/mobile yt-dlp helper with touch UI, single-item and playlist commands for Best/MP4/MP3/OPUS, custom playlist ranges, clipboard fallbacks, and Android/Termux command helpers.
 
 ## Install in Tampermonkey / a compatible userscript manager
 
@@ -26,6 +26,12 @@ The userscripts in this repository include GitHub `@downloadURL` / `@updateURL` 
 The v2 toolkit automatically adapts to desktop versus touch/mobile environments. Desktop keeps popup-style windows and hotkeys, while touch/mobile environments favor new tabs, larger tap targets, a floating media control button, responsive portrait/landscape multi-player layouts, and compatibility fallbacks for clipboard, storage, and downloads.
 
 On Android it also exposes Termux-oriented yt-dlp command copying. Browser userscripts cannot directly execute the local yt-dlp binary, so these commands are copied for use in Termux or another shell environment.
+
+## Kindred yt-dlp Helper v2.0
+
+The standalone helper now uses the same adaptive approach: desktop users can keep using the userscript menu, while touch/mobile users get an optional floating download button with a touch-friendly panel. Android adds Termux-ready commands that begin in `~/storage/downloads`.
+
+It supports current-item and playlist commands for Best, MP4, MP3, and OPUS, plus custom playlist ranges such as `1:10`, `1,3,5`, `5:`, and `:20`. Playlist downloads use playlist folders and numbered filenames so they remain organized.
 
 ## yt-dlp playlist helper
 
