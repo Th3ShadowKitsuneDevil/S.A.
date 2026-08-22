@@ -1,12 +1,13 @@
 // ==UserScript==
 // @name         Kindred YouTube Smart Queue Sorter
 // @namespace    kindred-tech.local
-// @version      2.2.0
-// @description  Smart YouTube queue sorting by duration, release date, title, channel, reverse, or shuffle, with Auto and Full queue scope controls.
+// @version      2.3.0
+// @description  Desktop/mobile-safe smart YouTube queue sorting by duration, release date, title, channel, reverse, or shuffle, with Auto and Full queue scope controls.
 // @author       Th3ShadowKitsuneDevil / Kindred
 // @license      MIT
 // @match        https://www.youtube.com/*
 // @match        https://youtube.com/*
+// @match        https://m.youtube.com/*
 // @run-at       document-idle
 // @noframes
 // @grant        none
@@ -18,6 +19,7 @@
   'use strict';
 
   const KEY='kindred-smart-queue', BAR=`${KEY}-bar`, STYLE=`${KEY}-style`, PARENT=`${KEY}-parent`;
+  // Desktop-site mode on mobile uses these same queue elements. If a mobile-web layout does not expose them, the script simply stays dormant.
   const PANEL='ytd-playlist-panel-renderer', ROW='ytd-playlist-panel-video-renderer';
   const SETTINGS=`${KEY}:settings`, DATECACHE=`${KEY}:publish-date-cache`;
   const defaults={mode:'duration-asc',auto:true,fullQueue:true};
@@ -155,22 +157,9 @@
       let locked=[];
 
       if(settings.fullQueue){
-        /*
-         * FULL QUEUE:
-         * Sort everything, including videos that are natively before the
-         * current item and the currently-playing row itself.
-         *
-         * The current video keeps playing; only its visual/planned position
-         * changes.
-         */
         sortable=items;
 
       }else{
-        /*
-         * UPCOMING ONLY:
-         * Keep everything through the currently-playing row where YouTube
-         * placed it and sort only the rows after it.
-         */
         const sel=items.findIndex(x=>x.selected);
         const lockedCount=sel>=0?sel+1:0;
 
@@ -180,11 +169,6 @@
 
       if(needDates()){
         await ensureDates(sortable);
-
-        /*
-         * YouTube can rerender while release dates are loading, so rebuild
-         * the row objects before applying the final order.
-         */
         items=rows().map(info);
 
         if(settings.fullQueue){
@@ -359,7 +343,15 @@
 #${BAR} select{max-width:215px;cursor:pointer}#${BAR} option{background:#212121;color:#fff}#${BAR} button{cursor:pointer}
 #${BAR} button:hover{background:var(--yt-spec-button-chip-background-hover,rgba(255,255,255,.18))}
 #${BAR} label{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;cursor:pointer}
-#${BAR} [data-status]{flex:1 1 220px;min-width:150px;opacity:.82}`;
+#${BAR} [data-status]{flex:1 1 220px;min-width:150px;opacity:.82}
+@media (pointer:coarse),(max-width:820px){
+  #${BAR}{margin:4px 4px 6px;padding:8px;gap:8px;font-size:13px}
+  #${BAR} select{flex:1 1 100%;max-width:none;min-height:42px}
+  #${BAR} button{min-height:42px;padding:8px 12px}
+  #${BAR} label{min-height:40px;padding:0 2px}
+  #${BAR} input[type="checkbox"]{width:18px;height:18px}
+  #${BAR} [data-status]{flex-basis:100%;min-width:0}
+}`;
     (document.head||document.documentElement).appendChild(s);
   }
   function opt(value,text){const o=document.createElement('option');o.value=value;o.textContent=text;return o}
