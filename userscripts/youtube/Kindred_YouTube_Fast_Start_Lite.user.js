@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Kindred YouTube Fast-Start Lite
 // @namespace    kindred-tech.local
-// @version      1.3.0
-// @description  Lightweight YouTube cleanup that preserves native playback/queue animations, hides Kindred add icons, suppresses live chat/replay, and disables YouTube's fullscreen quick-actions/comments/grid UI.
+// @version      1.4.0
+// @description  Lightweight YouTube cleanup that preserves native playback/queue animations, hides Kindred add icons, suppresses live chat/replay/fullscreen quick actions, and removes YouTube's new fixed side rail without leaving blank player space.
 // @author       Th3ShadowKitsuneDevil / Kindred
 // @license      MIT
 // @match        https://www.youtube.com/*
@@ -67,6 +67,20 @@
         'ytp-grid-scrolling',
         'ytp-grid-scrollable',
         'ytp-fullscreen-grid-peeking'
+    ];
+
+    /*
+     * YouTube's newer fixed Side Rail / side menu.
+     *
+     * This is separate from the older live-chat and engagement panels.
+     * When hidden cosmetically without also clearing the watch-page width
+     * variables, YouTube can leave a large empty black column beside the
+     * fullscreen player.
+     */
+    const SIDE_RAIL_SELECTORS = [
+        '#fixed-side-menu',
+        '.ytSideRailViewModelHost',
+        '.ytSideRailViewModelHideButtonContainer'
     ];
 
     let guardedPlayer =
@@ -346,6 +360,98 @@
 
 
             /*
+             * ---------------------------------------------
+             * NEW 2026 FIXED SIDE RAIL
+             * ---------------------------------------------
+             *
+             * YouTube now has a separate fixed right-side menu
+             * that can contain Description / Comments / Ask.
+             *
+             * Merely hiding the rail leaves its reserved width behind,
+             * producing the large empty black strip shown beside the
+             * fullscreen video. Reset BOTH watch-flexy width variables.
+             */
+
+            #fixed-side-menu,
+
+            .ytSideRailViewModelHost,
+
+            .ytSideRailViewModelHideButtonContainer {
+
+                display:
+                    none !important;
+
+                visibility:
+                    hidden !important;
+
+                opacity:
+                    0 !important;
+
+                pointer-events:
+                    none !important;
+
+                width:
+                    0 !important;
+
+                min-width:
+                    0 !important;
+
+                max-width:
+                    0 !important;
+
+                margin:
+                    0 !important;
+
+                padding:
+                    0 !important;
+
+                border:
+                    0 !important;
+            }
+
+
+            ytd-watch-flexy {
+
+                --ytd-watch-flexy-side-menu-margin:
+                    0px !important;
+
+                --ytd-watch-flexy-fixed-side-menu-width:
+                    0px !important;
+            }
+
+
+            /*
+             * Some variants add a synthetic spacer after #columns.
+             * Remove that spacer too.
+             */
+
+            ytd-watch-flexy[
+                show-fixed-side-menu
+            ][
+                is-two-columns_
+            ]:not(
+                [full-bleed-player]
+            )
+            #columns.ytd-watch-flexy::after {
+
+                display:
+                    none !important;
+
+                width:
+                    0 !important;
+
+                min-width:
+                    0 !important;
+
+                max-width:
+                    0 !important;
+
+                content:
+                    none !important;
+            }
+
+
+            /*
              * Neutralize YouTube's fullscreen-grid
              * layout variables.
              *
@@ -598,6 +704,132 @@
 
     /*
      * -----------------------------------------------------
+     * FIXED SIDE RAIL SUPPRESSION
+     * -----------------------------------------------------
+     *
+     * This handles the 2026 YouTube Side Rail separately from
+     * live chat. The important part is not only hiding it, but
+     * making YouTube collapse the space it reserved for it.
+     */
+
+    function suppressFixedSideRail() {
+        const flexy =
+            document.querySelector(
+                'ytd-watch-flexy'
+            );
+
+        if (
+            flexy
+        ) {
+            flexy.style.setProperty(
+                '--ytd-watch-flexy-side-menu-margin',
+                '0px',
+                'important'
+            );
+
+            flexy.style.setProperty(
+                '--ytd-watch-flexy-fixed-side-menu-width',
+                '0px',
+                'important'
+            );
+        }
+
+
+        /*
+         * If YouTube exposed its own hide button, use it first.
+         * That lets YouTube update any internal state attached to
+         * the side rail instead of leaving it logically expanded.
+         */
+
+        const hideButton =
+            document.querySelector(
+                '.ytSideRailViewModelHideButtonContainer button'
+            );
+
+        if (
+            hideButton
+        ) {
+            const pressed =
+                hideButton.getAttribute(
+                    'aria-pressed'
+                );
+
+            /*
+             * The current A/B variant uses aria-pressed=true for hidden.
+             * Only click when it reports the rail as not hidden.
+             */
+            if (
+                pressed !==
+                    'true'
+            ) {
+                try {
+                    hideButton.click();
+
+                } catch (_) {}
+            }
+        }
+
+
+        for (
+            const selector of
+            SIDE_RAIL_SELECTORS
+        ) {
+            for (
+                const element of
+                document.querySelectorAll(
+                    selector
+                )
+            ) {
+                element.style.setProperty(
+                    'display',
+                    'none',
+                    'important'
+                );
+
+                element.style.setProperty(
+                    'width',
+                    '0px',
+                    'important'
+                );
+
+                element.style.setProperty(
+                    'min-width',
+                    '0px',
+                    'important'
+                );
+
+                element.style.setProperty(
+                    'max-width',
+                    '0px',
+                    'important'
+                );
+            }
+        }
+
+
+        /*
+         * A synthetic resize makes YouTube recalculate the player after
+         * the rail width is collapsed. Do it on the next frame so CSS and
+         * the hide-button state have landed first.
+         */
+
+        requestAnimationFrame(
+            () => {
+                try {
+                    window.dispatchEvent(
+                        new Event(
+                            'resize'
+                        )
+                    );
+
+                } catch (_) {}
+            }
+        );
+    }
+
+
+    /*
+     * -----------------------------------------------------
      * FULLSCREEN PLAYER STABILIZATION
      * -----------------------------------------------------
      */
@@ -695,6 +927,8 @@
 
         suppressSidePanels();
 
+        suppressFixedSideRail();
+
         attachPlayerGuard();
 
         stabilizePlayer();
@@ -731,6 +965,8 @@
             setTimeout(
                 () => {
                     suppressSidePanels();
+
+                    suppressFixedSideRail();
 
                     attachPlayerGuard();
 
@@ -773,6 +1009,8 @@
                 () => {
                     suppressSidePanels();
 
+                    suppressFixedSideRail();
+
                     attachPlayerGuard();
 
                     stabilizePlayer();
@@ -796,6 +1034,8 @@
 
         () => {
             suppressSidePanels();
+
+            suppressFixedSideRail();
 
             attachPlayerGuard();
 
@@ -855,6 +1095,30 @@
     document.addEventListener(
         'yt-navigate-finish',
         refresh,
+        true
+    );
+
+
+    /*
+     * The fixed Side Rail can be rebuilt after the normal
+     * navigation-finished event, especially on watch-page updates.
+     */
+
+    window.addEventListener(
+        'yt-page-data-updated',
+        () => {
+            suppressFixedSideRail();
+
+            setTimeout(
+                suppressFixedSideRail,
+                100
+            );
+
+            setTimeout(
+                suppressFixedSideRail,
+                500
+            );
+        },
         true
     );
 
