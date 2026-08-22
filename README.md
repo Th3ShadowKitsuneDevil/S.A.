@@ -6,12 +6,14 @@ Personal userscripts and browser automation helpers.
 ## Userscripts
 
 ### YouTube
-- `userscripts/youtube/Efficient_YouTube_Age_Restriction_Bypass.user.js` — efficient hybrid age/content restriction helper based on the two MIT-licensed scripts used during development. Direct methods are attempted before optional proxy fallback, with signed-out/incognito performance in mind.
-- `userscripts/youtube/Kindred_YouTube_Fast_Start_Lite.user.js` — lightweight YouTube UI/performance trim that avoids invasive timer/scheduler monkey-patching.
+- `userscripts/youtube/Efficient_YouTube_Age_Restriction_Bypass.user.js` — efficient hybrid age/content restriction helper based on the two MIT-licensed scripts used during development. Direct methods are attempted before optional proxy fallback, with signed-out/incognito performance in mind. Includes mobile YouTube matching.
+- `userscripts/youtube/Kindred_YouTube_Fast_Start_Lite.user.js` — minimal desktop/mobile-safe YouTube performance helper. It only disables the cinematic/ambient background and deliberately leaves chat, buttons, queues, fullscreen UI, player sizing, and input native.
+- `userscripts/youtube/Kindred_YouTube_Smart_Queue_Sorter.user.js` — smart queue sorter for duration, release date, title, channel, reverse, and shuffle, with Auto and Full Queue controls.
 
 ### Media / yt-dlp
-- `userscripts/media/Kindred_Universal_Media_Toolkit.user.js` — v2.0 adaptive desktop/mobile toolkit with popup-or-tab media players, touch controls, responsive multi-player layouts, YouTube live-chat cleanup, anti-rickroll guard, direct-media helpers, yt-dlp playlist commands, and Android/Termux command helpers.
-- `userscripts/media/Kindred_yt-dlp_Helper.user.js` — v2.0 adaptive desktop/mobile yt-dlp helper with touch UI, single-item and playlist commands for Best/MP4/MP3/OPUS, custom playlist ranges, clipboard fallbacks, and Android/Termux command helpers.
+- `userscripts/media/Kindred_Universal_Media_Toolkit.user.js` — v3.0.1 desktop/mobile toolkit with media lists, popup/tab players, responsive multi-player layouts, direct-media helpers, integrated yt-dlp single/playlist commands, Android/Termux commands, and anti-rickroll protection. It no longer hides, removes, or manipulates YouTube live chat, chat replay, comments, side rails, fullscreen quick actions, or player layout.
+- `userscripts/media/Kindred_yt-dlp_Helper.user.js` — v2.1.0 safe standalone yt-dlp command copier. It supports Best/MP4/MP3/OPUS, playlists, custom ranges, and Android/Termux. When Universal Media Toolkit v3+ is active, this standalone helper automatically stays dormant to avoid duplicate menus/UI.
+- `userscripts/media/Kindred_Streaming_Site_Helper.user.js` — adaptive desktop/mobile streaming helper for Tubi, LookMovie2, and similar sites. Keep site-specific playback compatibility in mind; DRM-protected media is outside its scope.
 
 ## Install in Tampermonkey / a compatible userscript manager
 
@@ -21,21 +23,36 @@ Personal userscripts and browser automation helpers.
 
 The userscripts in this repository include GitHub `@downloadURL` / `@updateURL` metadata so compatible userscript managers can check this repository for updates.
 
-## Kindred Universal Media Toolkit v2.0
+## Kindred Universal Media Toolkit v3.0.1
 
-The v2 toolkit automatically adapts to desktop versus touch/mobile environments. Desktop keeps popup-style windows and hotkeys, while touch/mobile environments favor new tabs, larger tap targets, a floating media control button, responsive portrait/landscape multi-player layouts, and compatibility fallbacks for clipboard, storage, and downloads.
+The toolkit is now the primary combined media script. It includes the yt-dlp functionality directly, so the standalone yt-dlp helper is optional rather than required.
 
-On Android it also exposes Termux-oriented yt-dlp command copying. Browser userscripts cannot directly execute the local yt-dlp binary, so these commands are copied for use in Termux or another shell environment.
+Desktop behavior favors popup-style media windows where useful. Touch/mobile behavior favors new tabs, large tap targets, safe-area-aware controls, responsive portrait/landscape multi-player layouts, and clipboard/download fallbacks. On Android it exposes Termux-oriented yt-dlp commands that begin in `~/storage/downloads`.
 
-## Kindred yt-dlp Helper v2.0
+The floating toolkit button is deliberately conservative: on mobile sites it can be enabled, but on YouTube it defaults off so it does not cover or interfere with native player controls.
 
-The standalone helper now uses the same adaptive approach: desktop users can keep using the userscript menu, while touch/mobile users get an optional floating download button with a touch-friendly panel. Android adds Termux-ready commands that begin in `~/storage/downloads`.
+The anti-rickroll guard is integrated into the toolkit. It checks recognized YouTube video IDs, presents a reversible warning screen, and allows a one-session “Continue anyway” bypass. It can be turned on or off from the userscript menu or toolkit panel.
 
-It supports current-item and playlist commands for Best, MP4, MP3, and OPUS, plus custom playlist ranges such as `1:10`, `1,3,5`, `5:`, and `:20`. Playlist downloads use playlist folders and numbered filenames so they remain organized.
+Most importantly, the toolkit no longer removes or hides YouTube live chat, live-chat replay, comments, side rails, fullscreen buttons, player classes, or player sizing. Those remain entirely under YouTube's control.
+
+## Kindred yt-dlp Helper v2.1.0
+
+The standalone helper is now intentionally minimal and page-safe: no floating overlay by default, no page-wide CSS, no media/player mutation, and no global click interception. It uses the userscript menu to copy current-item and playlist commands for Best, MP4, MP3, and OPUS, plus custom playlist ranges such as `1:10`, `1,3,5`, `5:`, and `:20`.
+
+When Universal Media Toolkit v3+ is enabled, the standalone helper detects the toolkit and stays dormant so the same yt-dlp functionality is not injected twice.
+
+## Mobile compatibility
+
+- Universal Media Toolkit: adaptive desktop/mobile UI; Android/Termux support.
+- Standalone yt-dlp Helper: desktop/mobile-safe menu workflow; Android/Termux support.
+- Efficient YouTube Age Restriction Bypass: includes `m.youtube.com` support.
+- Fast-Start Lite: includes desktop, mobile YouTube, and YouTube Music matching while leaving the player UI native.
+- Smart Queue Sorter: designed around YouTube's playlist-panel queue DOM. It is safe to use on touch devices and works when that queue DOM is available, including desktop-site mode on mobile; unsupported mobile layouts simply do not get a sorter panel.
+- Streaming Site Helper: adaptive desktop/mobile design, though individual streaming sites can change player behavior and may require site-specific updates.
 
 ## yt-dlp playlist helper
 
-The yt-dlp helpers can copy commands for either the current item only or the entire playlist. Playlist commands use playlist folders and numbered filenames so downloads stay organized. Custom playlist item ranges are also supported.
+The integrated toolkit and optional standalone helper can copy commands for either the current item or an entire playlist. Playlist commands use playlist folders and numbered filenames so downloads stay organized. Custom playlist item ranges are also supported.
 
 The scripts do not attempt to defeat DRM. yt-dlp features depend on what the site and yt-dlp can access.
 
