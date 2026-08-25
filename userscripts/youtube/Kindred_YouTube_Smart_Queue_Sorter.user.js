@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Kindred YouTube Smart Queue Sorter
 // @namespace    kindred-tech.local
-// @version      2.3.0
-// @description  Desktop/mobile-safe smart YouTube queue sorting by duration, release date, title, channel, reverse, or shuffle, with Auto and Full queue scope controls.
+// @version      2.4.0
+// @description  Desktop/mobile-safe smart YouTube queue sorting with persistent locked order across queued-video navigation, refreshes, and YouTube rerenders.
 // @author       Th3ShadowKitsuneDevil / Kindred
 // @license      MIT
 // @match        https://www.youtube.com/*
@@ -21,9 +21,9 @@
   const KEY='kindred-smart-queue', BAR=`${KEY}-bar`, STYLE=`${KEY}-style`, PARENT=`${KEY}-parent`;
   // Desktop-site mode on mobile uses these same queue elements. If a mobile-web layout does not expose them, the script simply stays dormant.
   const PANEL='ytd-playlist-panel-renderer', ROW='ytd-playlist-panel-video-renderer';
-  const SETTINGS=`${KEY}:settings`, DATECACHE=`${KEY}:publish-date-cache`;
+  const SETTINGS=`${KEY}:settings`, DATECACHE=`${KEY}:publish-date-cache`, ORDERCACHE=`${KEY}:locked-order`;
   const defaults={mode:'duration-asc',auto:true,fullQueue:true};
-  const state={applying:false,observer:null,parent:null,timer:0,plan:[],ranks:new Map(),dates:loadDates(),loading:new Map(),pending:null,hooked:new WeakSet(),install:0};
+  const state={applying:false,observer:null,parent:null,timer:0,plan:[],ranks:new Map(),dates:loadDates(),loading:new Map(),pending:null,hooked:new WeakSet(),install:0,lock:loadOrderLock()};
   let settings=loadSettings();
 
   function loadSettings(){
@@ -39,6 +39,20 @@
   function saveSettings(){try{localStorage.setItem(SETTINGS,JSON.stringify(settings))}catch{}}
   function loadDates(){try{const x=JSON.parse(sessionStorage.getItem(DATECACHE)||'{}');return x&&typeof x==='object'?x:{}}catch{return{}}}
   function saveDates(){try{sessionStorage.setItem(DATECACHE,JSON.stringify(state.dates))}catch{}}
+  function loadOrderLock(){
+    try{
+      const x=JSON.parse(sessionStorage.getItem(ORDERCACHE)||'null');
+      return x&&typeof x==='object'&&Array.isArray(x.order)?x:null;
+    }catch{return null}
+  }
+  function saveOrderLock(lock){
+    state.lock=lock;
+    try{
+      if(lock)sessionStorage.setItem(ORDERCACHE,JSON.stringify(lock));
+      else sessionStorage.removeItem(ORDERCACHE);
+    }catch{}
+  }
+  function clearOrderLock(){saveOrderLock(null)}
   function u(v,b=location.href){try{return new URL(v,b)}catch{return null}}
   function runs(v){if(!v)return'';if(typeof v==='string')return v;if(typeof v.simpleText==='string')return v.simpleText;return Array.isArray(v.runs)?v.runs.map(x=>x?.text||'').join(''):''}
   function durText(v){
@@ -72,6 +86,80 @@
     const v=id(r);
     return{row:r,native:i,videoId:v,href:href(r),title:title(r),channel:channel(r),duration:duration(r),releaseDate:v&&Object.hasOwn(state.dates,v)?state.dates[v]:null,selected:selected(r)};
   }
+  function rawStableKey(item){
+    const d=data(item.row);
+    const endpoint=d?.navigationEndpoint?.watchEndpoint||{};
+    const setId=
+      d?.playlistSetVideoId||
+      d?.setVideoId||
+      endpoint?.playlistSetVideoId||
+      '';
+    if(setId)return`set:${setId}`;
+
+    const index=
+      endpoint?.index ??
+      d?.index ??
+      u(item.href)?.searchParams.get('index');
+
+    if(item.videoId&&index!==null&&index!==undefined&&index!==''){
+      return`video:${item.videoId}:index:${index}`;
+    }
+
+    if(item.videoId)return`video:${item.videoId}`;
+
+    const url=u(item.href);
+    return`href:${url ? `${url.pathname}${url.search}` : item.href || item.native}`;
+  }
+
+  function collectItems(){
+    const seen=new Map();
+
+    return rows().map(info).map(item=>{
+      const base=rawStableKey(item);
+      const count=seen.get(base)||0;
+      seen.set(base,count+1);
+
+      return{
+        ...item,
+        key:count===0?base:`${base}:occ:${count}`
+      };
+    });
+  }
+
+  function queueIdentity(items){
+    const pageList=u(location.href)?.searchParams.get('list');
+    if(pageList)return`list:${pageList}`;
+
+    for(const item of items){
+      const d=data(item.row);
+      const listId=
+        d?.navigationEndpoint?.watchEndpoint?.playlistId||
+        d?.playlistId||
+        u(item.href)?.searchParams.get('list');
+
+      if(listId)return`list:${listId}`;
+    }
+
+    let token=sessionStorage.getItem(`${KEY}:tab-queue-token`);
+    if(!token){
+      token=`tab:${Date.now().toString(36)}:${Math.random().toString(36).slice(2)}`;
+      try{sessionStorage.setItem(`${KEY}:tab-queue-token`,token)}catch{}
+    }
+    return token;
+  }
+
+  function lockCompatible(lock,identity,items){
+    if(!lock)return false;
+    if(lock.identity!==identity)return false;
+    if(lock.mode!==settings.mode)return false;
+    if(lock.fullQueue!==settings.fullQueue)return false;
+
+    const current=new Set(items.map(x=>x.key));
+    const overlap=lock.order.filter(k=>current.has(k)).length;
+    const denominator=Math.max(1,Math.min(lock.order.length,current.size));
+
+    return overlap/denominator>=0.35;
+  }
   function cmpUnknown(a,b,dir=1){
     const au=a==null||Number.isNaN(a),bu=b==null||Number.isNaN(b);
     if(au&&bu)return 0;if(au)return 1;if(bu)return-1;
@@ -91,6 +179,82 @@
       case'shuffle':return(a,b)=>rank(a.videoId||`${a.title}|${a.native}`)-rank(b.videoId||`${b.title}|${b.native}`);
       default:return(a,b)=>a.native-b.native;
     }
+  }
+  function primaryComparator(m){
+    switch(m){
+      case'duration-asc':return(a,b)=>cmpUnknown(a.duration,b.duration,1);
+      case'duration-desc':return(a,b)=>cmpUnknown(a.duration,b.duration,-1);
+      case'date-newest':return(a,b)=>cmpUnknown(a.releaseDate,b.releaseDate,-1);
+      case'date-oldest':return(a,b)=>cmpUnknown(a.releaseDate,b.releaseDate,1);
+      case'title-asc':return(a,b)=>norm(a.title).localeCompare(norm(b.title));
+      case'title-desc':return(a,b)=>norm(b.title).localeCompare(norm(a.title));
+      case'channel-asc':return(a,b)=>norm(a.channel).localeCompare(norm(b.channel));
+      case'channel-desc':return(a,b)=>norm(b.channel).localeCompare(norm(a.channel));
+      default:return()=>0;
+    }
+  }
+
+  function reconcileLockedOrder(lockOrder,items){
+    const byKey=new Map(items.map(x=>[x.key,x]));
+    const existing=[];
+    const existingKeys=new Set();
+
+    for(const key of lockOrder){
+      const item=byKey.get(key);
+      if(!item)continue;
+      existing.push(item);
+      existingKeys.add(key);
+    }
+
+    const added=items.filter(x=>!existingKeys.has(x.key));
+    if(!added.length)return existing;
+
+    if(settings.mode==='shuffle'){
+      const out=[...existing];
+      for(const item of added){
+        const slot=Math.floor(Math.random()*(out.length+1));
+        out.splice(slot,0,item);
+      }
+      return out;
+    }
+
+    if(settings.mode==='reverse'){
+      return[
+        ...added.sort((a,b)=>b.native-a.native),
+        ...existing
+      ];
+    }
+
+    const cmp=primaryComparator(settings.mode);
+    const out=[...existing];
+
+    for(const item of added){
+      let at=out.findIndex(other=>cmp(item,other)<0);
+      if(at<0)at=out.length;
+      out.splice(at,0,item);
+    }
+
+    return out;
+  }
+
+  function buildLockedOrder(items,identity,{force=false}={}){
+    if(!items.length)return[];
+
+    if(!force&&lockCompatible(state.lock,identity,items)){
+      return reconcileLockedOrder(state.lock.order,items);
+    }
+
+    return[...items].sort(comparator(settings.mode));
+  }
+
+  function persistOrder(identity,ordered){
+    saveOrderLock({
+      identity,
+      mode:settings.mode,
+      fullQueue:settings.fullQueue,
+      order:ordered.map(x=>x.key),
+      updated:Date.now()
+    });
   }
   function needDates(){return settings.mode==='date-newest'||settings.mode==='date-oldest'}
   function label(m){return({manual:'Manual / YouTube order','duration-asc':'Duration: shortest first','duration-desc':'Duration: longest first','date-newest':'Release date: newest first','date-oldest':'Release date: oldest first','title-asc':'Title: A → Z','title-desc':'Title: Z → A','channel-asc':'Channel: A → Z','channel-desc':'Channel: Z → A',reverse:'Reverse queue order',shuffle:'Shuffle'})[m]||m}
@@ -120,13 +284,14 @@
     await Promise.all(Array.from({length:Math.min(4,miss.length)},worker));
   }
 
-  function clearSort(){
+  function clearSort({clearLock=false}={}){
     const rs=rows(),p=parent(rs);p?.classList.remove(PARENT);
     for(const r of rs)r.style.removeProperty('--kindred-smart-order');
     state.plan=[];
+    if(clearLock)clearOrderLock();
   }
 
-  async function applySort({quiet=false}={}){
+  async function applySort({quiet=false,forceRebuild=false}={}){
     if(state.applying)return;
     state.applying=true;
 
@@ -141,20 +306,22 @@
       observe(p);
 
       if(settings.mode==='manual'){
-        clearSort();
+        clearSort({clearLock:true});
 
         if(!quiet){
           status(
-            'Manual / YouTube order — Kindred sorting is not controlling the queue.'
+            'Manual / YouTube order — persistent smart order is off.'
           );
         }
 
         return;
       }
 
-      let items=rs.map(info);
+      let items=collectItems();
+      const identity=queueIdentity(items);
+
       let sortable;
-      let locked=[];
+      let lockedPrefix=[];
 
       if(settings.fullQueue){
         sortable=items;
@@ -163,34 +330,40 @@
         const sel=items.findIndex(x=>x.selected);
         const lockedCount=sel>=0?sel+1:0;
 
-        locked=items.slice(0,lockedCount);
+        lockedPrefix=items.slice(0,lockedCount);
         sortable=items.slice(lockedCount);
       }
 
       if(needDates()){
         await ensureDates(sortable);
-        items=rows().map(info);
+
+        items=collectItems();
 
         if(settings.fullQueue){
           sortable=items;
-          locked=[];
+          lockedPrefix=[];
 
         }else{
           const sel=items.findIndex(x=>x.selected);
           const lockedCount=sel>=0?sel+1:0;
 
-          locked=items.slice(0,lockedCount);
+          lockedPrefix=items.slice(0,lockedCount);
           sortable=items.slice(lockedCount);
         }
       }
 
-      const sorted=[...sortable].sort(
-        comparator(settings.mode)
-      );
+      const orderedSortable=
+        buildLockedOrder(
+          sortable,
+          identity,
+          {force:forceRebuild}
+        );
+
+      persistOrder(identity,orderedSortable);
 
       const plan=settings.fullQueue
-        ? sorted
-        : [...locked,...sorted];
+        ? orderedSortable
+        : [...lockedPrefix,...orderedSortable];
 
       p.classList.add(PARENT);
 
@@ -216,7 +389,7 @@
         status(
           `${label(settings.mode)} • ` +
           `${settings.fullQueue?'full queue':'upcoming only'} • ` +
-          `${sorted.length} sorted item${sorted.length===1?'':'s'}` +
+          `🔒 order locked` +
           currentText
         );
       }
@@ -289,8 +462,9 @@
       state.ranks.clear();
     }
 
+    clearOrderLock();
     syncUi();
-    applySort();
+    applySort({forceRebuild:true});
   }
 
   function setAuto(v){
@@ -311,8 +485,9 @@
   function setFullQueue(v){
     settings.fullQueue=!!v;
     saveSettings();
+    clearOrderLock();
     syncUi();
-    applySort();
+    applySort({forceRebuild:true});
 
     status(
       settings.fullQueue
@@ -418,9 +593,9 @@
 
     const apply=document.createElement('button');
     apply.type='button';
-    apply.textContent='Apply now';
-    apply.title='Re-read the current queue and apply the selected sort';
-    apply.addEventListener('click',()=>applySort());
+    apply.textContent='Rebuild order';
+    apply.title='Re-read the current queue, rebuild the chosen sort, and lock that order';
+    apply.addEventListener('click',()=>applySort({forceRebuild:true}));
 
     const shuffle=document.createElement('button');
     shuffle.type='button';
@@ -432,9 +607,12 @@
       ()=>{
         state.ranks.clear();
 
-        settings.mode==='shuffle'
-          ? applySort()
-          : setMode('shuffle');
+        if(settings.mode==='shuffle'){
+          clearOrderLock();
+          applySort({forceRebuild:true});
+        }else{
+          setMode('shuffle');
+        }
       }
     );
 
@@ -443,8 +621,8 @@
 
     st.textContent=
       settings.fullQueue
-        ? 'Full queue on — the entire queue participates in the selected sort.'
-        : 'Full queue off — only upcoming videos are sorted.';
+        ? 'Full queue on • chosen order stays locked across queued videos.'
+        : 'Upcoming-only sort • chosen upcoming order stays locked across queued videos.';
 
     bar.append(
       select,
