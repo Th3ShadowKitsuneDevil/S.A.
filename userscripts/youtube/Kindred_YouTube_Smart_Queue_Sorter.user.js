@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Kindred YouTube Smart Queue Sorter
 // @namespace    kindred-tech.local
-// @version      2.4.0
-// @description  Desktop/mobile-safe smart YouTube queue sorting with persistent locked order across queued-video navigation, refreshes, and YouTube rerenders.
+// @version      2.5.0
+// @description  Desktop/mobile-safe YouTube queue sorter with persistent visual order and playback-order enforcement so Next/Previous/autoplay follow the same locked queue.
 // @author       Th3ShadowKitsuneDevil / Kindred
 // @license      MIT
 // @match        https://www.youtube.com/*
@@ -23,8 +23,16 @@
   const PANEL='ytd-playlist-panel-renderer', ROW='ytd-playlist-panel-video-renderer';
   const SETTINGS=`${KEY}:settings`, DATECACHE=`${KEY}:publish-date-cache`, ORDERCACHE=`${KEY}:locked-order`;
   const defaults={mode:'duration-asc',auto:true,fullQueue:true};
-  const state={applying:false,observer:null,parent:null,timer:0,plan:[],ranks:new Map(),dates:loadDates(),loading:new Map(),pending:null,hooked:new WeakSet(),install:0,lock:loadOrderLock()};
+  const state={applying:false,observer:null,parent:null,timer:0,plan:[],ranks:new Map(),dates:loadDates(),loading:new Map(),pending:null,install:0,lock:loadOrderLock(),navSerial:0};
   let settings=loadSettings();
+
+  /*
+   * v2.5 playback contract:
+   *   1) CSS order controls what the queue LOOKS like.
+   *   2) state.plan is built from that exact same locked order.
+   *   3) ended/Next/Previous/keyboard navigation all use state.plan.
+   *   4) native YouTube ended/autonav is stopped while smart mode is active.
+   */
 
   function loadSettings(){
     try{
@@ -89,25 +97,44 @@
   function rawStableKey(item){
     const d=data(item.row);
     const endpoint=d?.navigationEndpoint?.watchEndpoint||{};
+    const url=u(item.href);
+
     const setId=
       d?.playlistSetVideoId||
       d?.setVideoId||
       endpoint?.playlistSetVideoId||
       '';
+
     if(setId)return`set:${setId}`;
+
+    const playlistId=
+      endpoint?.playlistId||
+      d?.playlistId||
+      url?.searchParams.get('list')||
+      '';
 
     const index=
       endpoint?.index ??
       d?.index ??
-      u(item.href)?.searchParams.get('index');
+      url?.searchParams.get('index');
 
-    if(item.videoId&&index!==null&&index!==undefined&&index!==''){
-      return`video:${item.videoId}:index:${index}`;
+    if(
+      item.videoId&&
+      playlistId&&
+      index!==null&&
+      index!==undefined&&
+      index!==''
+    ){
+      return`video:${item.videoId}:list:${playlistId}:index:${index}`;
     }
 
+    /*
+     * For ordinary temporary queues, videoId is more stable than YouTube's
+     * mutable queue index. Duplicate video IDs are disambiguated by
+     * collectItems() with an occurrence suffix.
+     */
     if(item.videoId)return`video:${item.videoId}`;
 
-    const url=u(item.href);
     return`href:${url ? `${url.pathname}${url.search}` : item.href || item.native}`;
   }
 
@@ -247,14 +274,80 @@
     return[...items].sort(comparator(settings.mode));
   }
 
-  function persistOrder(identity,ordered){
+  function currentProgress(identity,items){
+    const keys=new Set(items.map(x=>x.key));
+
+    if(state.lock?.identity===identity){
+      return new Set(
+        Array.isArray(state.lock.completed)
+          ? state.lock.completed.filter(k=>keys.has(k))
+          : []
+      );
+    }
+
+    /*
+     * On a brand-new queue lock, rows that YouTube already places before
+     * the selected/current row are historical items. Mark them completed so
+     * Full queue sorting does not unexpectedly replay earlier videos.
+     */
+    const selectedNative=items.findIndex(x=>x.selected);
+
+    return new Set(
+      selectedNative>0
+        ? items.slice(0,selectedNative).map(x=>x.key)
+        : []
+    );
+  }
+
+  function persistOrder(identity,ordered,items){
+    const completed=currentProgress(identity,items);
+
     saveOrderLock({
       identity,
       mode:settings.mode,
       fullQueue:settings.fullQueue,
       order:ordered.map(x=>x.key),
+      completed:[...completed],
       updated:Date.now()
     });
+  }
+
+  function completedKeys(){
+    return new Set(
+      Array.isArray(state.lock?.completed)
+        ? state.lock.completed
+        : []
+    );
+  }
+
+  function markCompleted(item){
+    if(!item?.key||!state.lock)return;
+
+    const done=completedKeys();
+    done.add(item.key);
+
+    state.lock={
+      ...state.lock,
+      completed:[...done],
+      updated:Date.now()
+    };
+
+    saveOrderLock(state.lock);
+  }
+
+  function unmarkCompleted(item){
+    if(!item?.key||!state.lock)return;
+
+    const done=completedKeys();
+    done.delete(item.key);
+
+    state.lock={
+      ...state.lock,
+      completed:[...done],
+      updated:Date.now()
+    };
+
+    saveOrderLock(state.lock);
   }
   function needDates(){return settings.mode==='date-newest'||settings.mode==='date-oldest'}
   function label(m){return({manual:'Manual / YouTube order','duration-asc':'Duration: shortest first','duration-desc':'Duration: longest first','date-newest':'Release date: newest first','date-oldest':'Release date: oldest first','title-asc':'Title: A → Z','title-desc':'Title: Z → A','channel-asc':'Channel: A → Z','channel-desc':'Channel: Z → A',reverse:'Reverse queue order',shuffle:'Shuffle'})[m]||m}
@@ -352,6 +445,13 @@
         }
       }
 
+      /*
+       * Core v2.5 behavior:
+       *
+       * Once the chosen sort order is built, keep that exact relative order
+       * through YouTube SPA navigation, row rerenders, and page refreshes.
+       * New queue items are inserted without scrambling already-locked items.
+       */
       const orderedSortable=
         buildLockedOrder(
           sortable,
@@ -359,7 +459,7 @@
           {force:forceRebuild}
         );
 
-      persistOrder(identity,orderedSortable);
+      persistOrder(identity,orderedSortable,items);
 
       const plan=settings.fullQueue
         ? orderedSortable
@@ -389,64 +489,348 @@
         status(
           `${label(settings.mode)} • ` +
           `${settings.fullQueue?'full queue':'upcoming only'} • ` +
-          `🔒 order locked` +
+          `🔒 visual + playback order locked` +
           currentText
         );
       }
 
-      hookVideo();
 
     }finally{
       state.applying=false;
     }
   }
 
+  function currentLocator(){
+    const url=u(location.href);
+
+    return{
+      videoId:url?.searchParams.get('v')||'',
+      index:url?.searchParams.get('index')||'',
+      list:url?.searchParams.get('list')||''
+    };
+  }
+
   function currentIndex(){
     if(!state.plan.length)return-1;
-    const s=state.plan.findIndex(x=>selected(x.row));if(s>=0)return s;
-    const current=u(location.href)?.searchParams.get('v')||'';
-    return state.plan.findIndex(x=>x.videoId===current);
+
+    /*
+     * Prefer the actual URL over row.selected. During YouTube SPA rerenders,
+     * detached row objects can temporarily retain selected=true and point at
+     * the video we just left.
+     */
+    const loc=currentLocator();
+
+    if(loc.videoId){
+      const exact=state.plan.findIndex(item=>{
+        if(item.videoId!==loc.videoId)return false;
+
+        const target=u(item.href);
+
+        if(loc.list&&target?.searchParams.get('list')!==loc.list){
+          return false;
+        }
+
+        if(loc.index&&target?.searchParams.get('index')){
+          return target.searchParams.get('index')===loc.index;
+        }
+
+        return true;
+      });
+
+      if(exact>=0)return exact;
+
+      const byVideo=state.plan.findIndex(x=>x.videoId===loc.videoId);
+      if(byVideo>=0)return byVideo;
+    }
+
+    return state.plan.findIndex(x=>selected(x.row));
   }
-  function planned(delta){if(settings.mode==='manual')return null;const i=currentIndex();return i<0?null:state.plan[i+delta]||null}
-  function go(item){
+
+  function currentItem(){
+    const i=currentIndex();
+    return i>=0?state.plan[i]:null;
+  }
+
+  function nextPlayable(){
+    if(settings.mode==='manual'||!state.plan.length)return null;
+
+    const done=completedKeys();
+    const i=currentIndex();
+
+    if(i<0){
+      return state.plan.find(x=>!done.has(x.key))||null;
+    }
+
+    /*
+     * Full queue is a circular sorted sequence anchored at whatever is
+     * currently playing. This lets a video that began in the middle of the
+     * sorted display finish, then continue forward and wrap once to any
+     * still-unplayed items that visually precede it.
+     *
+     * completed[] prevents that wrap from replaying historical/finished rows.
+     */
+    if(settings.fullQueue){
+      for(let step=1;step<state.plan.length;step++){
+        const x=state.plan[(i+step)%state.plan.length];
+        if(!x||done.has(x.key))continue;
+        return x;
+      }
+
+      return null;
+    }
+
+    /*
+     * Upcoming-only mode never wraps into the already-played prefix.
+     */
+    for(let n=i+1;n<state.plan.length;n++){
+      const x=state.plan[n];
+      if(!x||done.has(x.key))continue;
+      return x;
+    }
+
+    return null;
+  }
+
+  function previousVisual(){
+    if(settings.mode==='manual'||!state.plan.length)return null;
+
+    const i=currentIndex();
+    if(i<0)return null;
+
+    if(i>0)return state.plan[i-1];
+
+    return settings.fullQueue
+      ? state.plan[state.plan.length-1]||null
+      : null;
+  }
+
+  function planned(delta){
+    if(delta>0)return nextPlayable();
+    if(delta<0)return previousVisual();
+    return currentItem();
+  }
+
+  function armPending(item,url,reason){
+    const serial=++state.navSerial;
+
+    state.pending={
+      serial,
+      key:item.key,
+      videoId:item.videoId,
+      href:url.href,
+      reason,
+      until:Date.now()+8000
+    };
+
+    /*
+     * If YouTube ignores/loses the synthetic row click during a rerender,
+     * force the exact target after a short grace period.
+     */
+    setTimeout(()=>{
+      const p=state.pending;
+      if(!p||p.serial!==serial)return;
+
+      const cur=currentLocator().videoId;
+
+      if(cur===p.videoId){
+        state.pending=null;
+        return;
+      }
+
+      if(Date.now()<p.until){
+        location.assign(p.href);
+      }
+    },1800);
+  }
+
+  function go(item,{reason='smart-navigation'}={}){
     if(!item)return false;
-    const h=item.href||href(item.row),url=u(h);if(!url)return false;
-    state.pending={videoId:item.videoId,href:url.href,until:Date.now()+5000};
-    const a=item.row?.querySelector('a#thumbnail[href*="/watch"]')||item.row?.querySelector('a[href*="/watch"]');
-    if(a)a.click();else location.assign(url.href);
+
+    const h=item.href||href(item.row);
+    const url=u(h);
+
+    if(!url)return false;
+
+    const current=currentLocator().videoId;
+    if(item.videoId&&current===item.videoId){
+      state.pending=null;
+      return false;
+    }
+
+    armPending(item,url,reason);
+
+    const a=
+      item.row?.querySelector('a#thumbnail[href*="/watch"]')
+      ||
+      item.row?.querySelector('a[href*="/watch"]');
+
+    if(a){
+      a.click();
+    }else{
+      location.assign(url.href);
+    }
+
     return true;
   }
-  function relative(delta){return go(planned(delta))}
-  function hookVideo(){
-    const v=document.querySelector('video');if(!v||state.hooked.has(v))return;
-    state.hooked.add(v);
-    v.addEventListener('ended',()=>{if(settings.mode!=='manual')relative(1)},true);
+
+  function forward({reason='next'}={}){
+    const here=currentItem();
+    const next=nextPlayable();
+
+    /*
+     * Treat an explicit forward skip exactly like finishing the video:
+     * don't let the skipped item reappear when Full queue wraps.
+     */
+    if(here)markCompleted(here);
+
+    if(!next){
+      status(
+        `${label(settings.mode)} • queue complete • ` +
+        `no unplayed item remains in the locked order`
+      );
+      return false;
+    }
+
+    return go(next,{reason});
   }
+
+  function backward({reason='previous'}={}){
+    const prev=previousVisual();
+
+    if(!prev)return false;
+
+    /*
+     * If the user deliberately goes back to something previously completed,
+     * make it eligible again until it finishes/is skipped.
+     */
+    unmarkCompleted(prev);
+
+    return go(prev,{reason});
+  }
+
+  function endedCapture(e){
+    if(
+      settings.mode==='manual'||
+      !(e.target instanceof HTMLVideoElement)||
+      !state.plan.length
+    ){
+      return;
+    }
+
+    const here=currentItem();
+    if(here)markCompleted(here);
+
+    const next=nextPlayable();
+
+    /*
+     * Stop YouTube's native queue/autonav handler from racing our sorted plan.
+     * ended itself is not cancelable, but stopping propagation during capture
+     * prevents downstream YouTube ended listeners from choosing native-next.
+     */
+    e.stopImmediatePropagation();
+    e.stopPropagation();
+
+    if(!next){
+      status(
+        `${label(settings.mode)} • queue complete • ` +
+        `playback followed the locked sorted order`
+      );
+      return;
+    }
+
+    go(next,{reason:'ended'});
+  }
+
   function navClick(e){
     if(settings.mode==='manual')return;
-    const b=e.target?.closest?.('.ytp-next-button, .ytp-prev-button');if(!b)return;
-    const x=planned(b.matches('.ytp-prev-button')?-1:1);if(!x)return;
-    e.preventDefault();e.stopImmediatePropagation();go(x);
+
+    const b=e.target?.closest?.(
+      '.ytp-next-button, .ytp-prev-button'
+    );
+
+    if(!b)return;
+
+    const previous=
+      b.matches('.ytp-prev-button');
+
+    const target=
+      previous
+        ? previousVisual()
+        : nextPlayable();
+
+    if(!target)return;
+
+    e.preventDefault();
+    e.stopImmediatePropagation();
+
+    if(previous){
+      backward({reason:'player-previous'});
+    }else{
+      forward({reason:'player-next'});
+    }
   }
+
   function keyboard(e){
     if(settings.mode==='manual')return;
-    const t=e.target,tag=(t?.tagName||'').toUpperCase();
-    if(['INPUT','TEXTAREA','SELECT'].includes(tag)||t?.isContentEditable)return;
+
+    const t=e.target;
+    const tag=(t?.tagName||'').toUpperCase();
+
+    if(
+      ['INPUT','TEXTAREA','SELECT'].includes(tag)||
+      t?.isContentEditable
+    ){
+      return;
+    }
+
     let d=0;
+
     if(e.shiftKey&&e.code==='KeyN')d=1;
     else if(e.shiftKey&&e.code==='KeyP')d=-1;
     else if(e.code==='MediaTrackNext')d=1;
     else if(e.code==='MediaTrackPrevious')d=-1;
+
     if(!d)return;
-    const x=planned(d);if(!x)return;
-    e.preventDefault();e.stopImmediatePropagation();go(x);
+
+    const target=d>0?nextPlayable():previousVisual();
+    if(!target)return;
+
+    e.preventDefault();
+    e.stopImmediatePropagation();
+
+    if(d>0){
+      forward({reason:'keyboard-next'});
+    }else{
+      backward({reason:'keyboard-previous'});
+    }
   }
+
   function verifyPending(){
-    const p=state.pending;if(!p)return;
-    if(Date.now()>p.until){state.pending=null;return}
-    const cur=u(location.href)?.searchParams.get('v')||'';
-    if(cur===p.videoId){state.pending=null;return}
-    const target=u(p.href);if(target){state.pending=null;location.assign(target.href)}
+    const p=state.pending;
+    if(!p)return;
+
+    if(Date.now()>p.until){
+      state.pending=null;
+      return;
+    }
+
+    const cur=currentLocator().videoId;
+
+    if(cur===p.videoId){
+      state.pending=null;
+      return;
+    }
+
+    /*
+     * If native YouTube autoplay won a race and navigated to its own next
+     * item, immediately correct back to the target from the locked plan.
+     */
+    const target=u(p.href);
+
+    if(target){
+      state.pending=null;
+      location.assign(target.href);
+    }
   }
 
   function status(text){
@@ -477,7 +861,7 @@
     }
 
     status(
-      `${label(settings.mode)} • automatic re-sort ` +
+      `${label(settings.mode)} • automatic queue sync ` +
       `${settings.auto?'enabled':'paused'}`
     );
   }
@@ -594,7 +978,7 @@
     const apply=document.createElement('button');
     apply.type='button';
     apply.textContent='Rebuild order';
-    apply.title='Re-read the current queue, rebuild the chosen sort, and lock that order';
+    apply.title='Re-read the queue, rebuild the chosen sort, and make playback follow that same locked order';
     apply.addEventListener('click',()=>applySort({forceRebuild:true}));
 
     const shuffle=document.createElement('button');
@@ -621,8 +1005,8 @@
 
     st.textContent=
       settings.fullQueue
-        ? 'Full queue on • chosen order stays locked across queued videos.'
-        : 'Upcoming-only sort • chosen upcoming order stays locked across queued videos.';
+        ? 'Full queue on • visual order + playback are locked together.'
+        : 'Upcoming-only sort • playback follows the same locked upcoming order.';
 
     bar.append(
       select,
@@ -671,18 +1055,18 @@
     clearInterval(state.install);let tries=0;
     state.install=setInterval(()=>{
       tries++;
-      const ok=installBar();hookVideo();
+      const ok=installBar();
       if(ok||tries>=30){clearInterval(state.install);state.install=0}
     },500);
   }
 
+  document.addEventListener('ended',endedCapture,true);
   document.addEventListener('click',navClick,true);
   document.addEventListener('keydown',keyboard,true);
   document.addEventListener('yt-navigate-finish',()=>{
     verifyPending();scheduleInstall();
-    setTimeout(()=>{hookVideo();if(settings.auto)applySort({quiet:true})},250);
+    setTimeout(()=>{if(settings.auto)applySort({quiet:true})},250);
   },true);
-  document.addEventListener('loadedmetadata',e=>{if(e.target instanceof HTMLVideoElement)hookVideo()},true);
 
   scheduleInstall();
 })();
