@@ -1,19 +1,35 @@
 # S.A.
 Software and Firmware Apps
 
-Personal userscripts and browser automation helpers.
+Personal userscripts, Chromium extensions, and browser automation helpers.
+
+## Extensions
+
+### YouTube
+- `extensions/youtube/Kindred_YouTube_Smart_Queue/` — Kindred YouTube Smart Queue v4.0.0 for Microsoft Edge / Google Chrome. It sorts YouTube's actual temporary Queue through YouTube's native queue model so the site's own Next/autoplay order agrees with the selected sort. Supports duration, release date, title, channel, reverse, shuffle, Auto, Full Queue, persistent locks, and native-order verification. Saved playlists are deliberately left untouched.
 
 ## Userscripts
 
 ### YouTube
 - `userscripts/youtube/Efficient_YouTube_Age_Restriction_Bypass.user.js` — efficient hybrid age/content restriction helper based on the two MIT-licensed scripts used during development. Direct methods are attempted before optional proxy fallback, with signed-out/incognito performance in mind. Includes mobile YouTube matching.
 - `userscripts/youtube/Kindred_YouTube_Fast_Start_Lite.user.js` — minimal desktop/mobile-safe YouTube performance helper. It only disables the cinematic/ambient background and deliberately leaves chat, buttons, queues, fullscreen UI, player sizing, and input native.
-- `userscripts/youtube/Kindred_YouTube_Smart_Queue_Sorter.user.js` — smart queue sorter for duration, release date, title, channel, reverse, and shuffle, with Auto and Full Queue controls.
+- `userscripts/youtube/Kindred_YouTube_Smart_Queue_Sorter.user.js` — legacy Smart Queue userscript retained for history/reference. For current Chromium/Edge use, prefer the v4 extension above because it synchronizes YouTube's native temporary queue rather than maintaining a separate visual/playback model.
 
 ### Media / yt-dlp
 - `userscripts/media/Kindred_Universal_Media_Toolkit.user.js` — v3.0.1 desktop/mobile toolkit with media lists, popup/tab players, responsive multi-player layouts, direct-media helpers, integrated yt-dlp single/playlist commands, Android/Termux commands, and anti-rickroll protection. It no longer hides, removes, or manipulates YouTube live chat, chat replay, comments, side rails, fullscreen quick actions, or player layout.
 - `userscripts/media/Kindred_yt-dlp_Helper.user.js` — v2.1.0 safe standalone yt-dlp command copier. It supports Best/MP4/MP3/OPUS, playlists, custom ranges, and Android/Termux. When Universal Media Toolkit v3+ is active, this standalone helper automatically stays dormant to avoid duplicate menus/UI.
 - `userscripts/media/Kindred_Streaming_Site_Helper.user.js` — adaptive desktop/mobile streaming helper for Tubi, LookMovie2, and similar sites. Keep site-specific playback compatibility in mind; DRM-protected media is outside its scope.
+
+## Install the Smart Queue extension in Edge / Chrome
+
+1. Download or clone this repository.
+2. Open `edge://extensions/` in Microsoft Edge or `chrome://extensions/` in Google Chrome.
+3. Enable **Developer mode**.
+4. Choose **Load unpacked**.
+5. Select `extensions/youtube/Kindred_YouTube_Smart_Queue/`.
+6. Refresh existing YouTube tabs once.
+
+If the legacy Tampermonkey Smart Queue Sorter is installed, disable it while using the extension.
 
 ## Install in Tampermonkey / a compatible userscript manager
 
@@ -47,7 +63,8 @@ When Universal Media Toolkit v3+ is enabled, the standalone helper detects the t
 - Standalone yt-dlp Helper: desktop/mobile-safe menu workflow; Android/Termux support.
 - Efficient YouTube Age Restriction Bypass: includes `m.youtube.com` support.
 - Fast-Start Lite: includes desktop, mobile YouTube, and YouTube Music matching while leaving the player UI native.
-- Smart Queue Sorter: designed around YouTube's playlist-panel queue DOM. It is safe to use on touch devices and works when that queue DOM is available, including desktop-site mode on mobile; unsupported mobile layouts simply do not get a sorter panel.
+- Smart Queue v4 extension: intended for Chromium browsers where YouTube exposes its native temporary Queue panel/model; it does not rewrite saved playlists.
+- Legacy Smart Queue Sorter userscript: designed around YouTube's playlist-panel queue DOM and retained for reference.
 - Streaming Site Helper: adaptive desktop/mobile design, though individual streaming sites can change player behavior and may require site-specific updates.
 
 ## yt-dlp playlist helper
@@ -62,4 +79,6 @@ The Efficient YouTube Age Restriction Bypass is derived from ideas/code paths in
 - Simple YouTube Age Restriction Bypass by Zerody — MIT License
 - YouTube Restriction Bypass (Advanced Config) by EmersonxD — MIT License
 
-See the individual userscript headers for attribution.
+The Kindred YouTube Smart Queue v4 native queue mechanism was informed by the MIT-licensed `dataterminals/YouTubeQueue` project, which documents YouTube's `yt-playlist-manager` queue reader and native panel `handleDrop()` reorder path.
+
+See the individual userscript/extension files for attribution.
