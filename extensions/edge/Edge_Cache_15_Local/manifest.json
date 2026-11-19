@@ -1,18 +1,14 @@
 {
   "manifest_version": 3,
-  "name": "Edge Cache 15 — Local",
+  "name": "Edge Cache 15 (Local)",
   "version": "1.0.0",
-  "description": "Clears Microsoft Edge's browser cache every 15 minutes while preserving cookies, logins, passwords, history, and service-worker registrations.",
-  "permissions": [
-    "alarms",
-    "browsingData",
-    "storage"
-  ],
+  "description": "Clears Microsoft Edge's browser-wide HTTP cache every 15 minutes without deleting cookies, passwords or history. Optional Cache Storage cleanup.",
+  "permissions": ["alarms", "browsingData", "storage"],
   "background": {
     "service_worker": "background.js"
   },
   "action": {
-    "default_title": "Edge Cache 15 — Local",
-    "default_popup": "popup/popup.html"
+    "default_title": "Edge Cache 15",
+    "default_popup": "popup.html"
   }
 }
