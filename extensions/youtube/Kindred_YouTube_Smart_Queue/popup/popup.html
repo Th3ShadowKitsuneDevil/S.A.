@@ -1,0 +1,59 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kindred Smart Queue</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Kindred Smart Queue</h1>
+        <div class="sub">Native YouTube queue sync v4.0.0</div>
+      </div>
+      <label class="switchline">
+        <input id="enabled" type="checkbox">
+        <span>Enabled</span>
+      </label>
+    </header>
+
+    <section>
+      <label class="field">
+        <span>Sort mode</span>
+        <select id="mode">
+          <option value="manual">Manual / YouTube order</option>
+          <option value="duration-asc">Duration — shortest first</option>
+          <option value="duration-desc">Duration — longest first</option>
+          <option value="date-newest">Release date — newest first</option>
+          <option value="date-oldest">Release date — oldest first</option>
+          <option value="title-asc">Title — A to Z</option>
+          <option value="title-desc">Title — Z to A</option>
+          <option value="channel-asc">Channel — A to Z</option>
+          <option value="channel-desc">Channel — Z to A</option>
+          <option value="reverse">Reverse current queue</option>
+          <option value="shuffle">Shuffle</option>
+        </select>
+      </label>
+
+      <label class="check"><input id="auto" type="checkbox"> <span>Auto-sync when YouTube changes the queue</span></label>
+      <label class="check"><input id="fullQueue" type="checkbox"> <span>Full queue</span></label>
+      <label class="check"><input id="debug" type="checkbox"> <span>Debug logging</span></label>
+    </section>
+
+    <section class="buttons">
+      <button id="rebuild">Rebuild native order</button>
+      <button id="reshuffle">Reshuffle</button>
+      <button id="clearLock">Clear lock</button>
+    </section>
+
+    <section class="statusbox">
+      <div id="status">Checking active tab…</div>
+      <div id="position" class="muted"></div>
+    </section>
+  </main>
+
+  <script src="popup.js"></script>
+</body>
+</html>
