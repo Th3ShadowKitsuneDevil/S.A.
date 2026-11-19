@@ -8,6 +8,9 @@ Personal userscripts, Chromium extensions, and browser automation helpers.
 ### YouTube
 - `extensions/youtube/Kindred_YouTube_Smart_Queue/` — Kindred YouTube Smart Queue v4.0.0 for Microsoft Edge / Google Chrome. It sorts YouTube's actual temporary Queue through YouTube's native queue model so the site's own Next/autoplay order agrees with the selected sort. Supports duration, release date, title, channel, reverse, shuffle, Auto, Full Queue, persistent locks, and native-order verification. Saved playlists are deliberately left untouched.
 
+### Microsoft Edge
+- `extensions/edge/Edge_Cache_15_Local/` — Edge Cache 15 — Local v1.0.0. Clears Edge's normal HTTP cache every 15 minutes while the browser is running, with optional Cache Storage cleanup and a manual **Clear cache now** button. Cookies, login sessions, passwords, browsing history, local storage, IndexedDB, and service-worker registrations are deliberately preserved.
+
 ## Userscripts
 
 ### YouTube
@@ -30,6 +33,16 @@ Personal userscripts, Chromium extensions, and browser automation helpers.
 6. Refresh existing YouTube tabs once.
 
 If the legacy Tampermonkey Smart Queue Sorter is installed, disable it while using the extension.
+
+## Install Edge Cache 15 — Local
+
+1. Download or clone this repository.
+2. Open `edge://extensions/`.
+3. Enable **Developer mode**.
+4. Choose **Load unpacked**.
+5. Select `extensions/edge/Edge_Cache_15_Local/`.
+
+HTTP cache clearing is enabled by default every 15 minutes. Cache Storage clearing remains off unless you enable it in the extension popup.
 
 ## Install in Tampermonkey / a compatible userscript manager
 
