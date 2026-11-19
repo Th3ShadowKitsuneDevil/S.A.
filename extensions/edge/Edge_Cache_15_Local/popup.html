@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Edge Cache 15</title>
+  <style>
+    :root { color-scheme: dark; font: 14px system-ui, -apple-system, "Segoe UI", sans-serif; }
+    body { margin: 0; min-width: 320px; width: 320px; background: #171a21; color: #f1f3f5; }
+    main { padding: 18px; }
+    h1 { margin: 0 0 4px; font-size: 19px; }
+    .sub { margin: 0 0 16px; color: #b7c0ca; font-size: 12px; line-height: 1.5; }
+    label { display: flex; align-items: flex-start; gap: 10px; margin: 14px 0; cursor: pointer; line-height: 1.4; }
+    input { margin-top: 3px; accent-color: #5caeff; }
+    .muted { color: #acb6c2; font-size: 12px; line-height: 1.5; }
+    button { border: 0; border-radius: 7px; background: #4d9df1; color: #101820; font-size: 14px; font-weight: 650; padding: 10px 14px; cursor: pointer; width: 100%; margin: 12px 0 6px; }
+    button:disabled { opacity: .55; cursor: wait; }
+    #status { font-size: 12px; min-height: 38px; padding-top: 7px; color: #ccd5df; overflow-wrap: anywhere; }
+    hr { border: none; height: 1px; background: #343b45; margin: 14px 0; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Edge Cache 15</h1>
+  <p class="sub">Local maintenance for this Microsoft Edge profile</p>
+  <label><input id="enabled" type="checkbox"><span>Automatically clear HTTP cache every 15 minutes</span></label>
+  <label><input id="includeStorage" type="checkbox"><span>Also clear website Cache Storage<br><span class="muted">Optional. Includes installed web apps, such as Hulu. May disrupt active pages or offline features.</span></span></label>
+  <hr>
+  <button id="clearNow" type="button">Clear cache now</button>
+  <div id="status" role="status">Loading...</div>
+  <p class="muted">Preserves cookies, logins, passwords, history, and service-worker registrations. Doesn't automatically reload pages. Runs while Edge is running; timer may be delayed during sleep.</p>
+</main>
+<script src="popup.js"></script>
+</body>
+</html>
