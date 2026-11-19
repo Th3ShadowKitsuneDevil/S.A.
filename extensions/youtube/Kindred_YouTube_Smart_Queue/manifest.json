@@ -1,0 +1,44 @@
+{
+  "manifest_version": 3,
+  "name": "Kindred YouTube Smart Queue",
+  "version": "4.0.0",
+  "description": "Sorts YouTube's actual temporary queue so YouTube's own Next/autoplay follows the sorted order.",
+  "permissions": [
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://www.youtube.com/*",
+    "https://youtube.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Kindred YouTube Smart Queue",
+    "default_popup": "popup/popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.youtube.com/*",
+        "https://youtube.com/*"
+      ],
+      "js": [
+        "content/native-bridge.js"
+      ],
+      "run_at": "document_idle",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://www.youtube.com/*",
+        "https://youtube.com/*"
+      ],
+      "js": [
+        "content/queue.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
